@@ -82,7 +82,9 @@ function GeocoderControl({ onResult }) {
     accessToken: MAPBOX_TOKEN,
     mapboxgl: null, // This will be set by useControl
     marker: false,  // We'll handle the marker ourselves
-    placeholder: 'Search for an address...',
+    placeholder: 'Search for a street address...',
+    types: 'address', // Focus on addresses rather than POIs or cities
+    proximity: [79.8612, 6.9271], // Default to Sri Lanka coordinates
   });
 
   useControl(() => {
@@ -97,7 +99,13 @@ function GeocoderControl({ onResult }) {
     const { result } = e;
     const [lng, lat] = result.geometry.coordinates;
     const name = result.text;
-    onResult({ lat, lng, name });
+    // Use place_name for full address (includes street, city, etc.)
+    // If not available, try to construct from context or use name
+    const fullAddress = result.place_name || 
+      (result.context ? 
+        `${result.text}, ${result.context.map(ctx => ctx.text).join(', ')}` : 
+        result.text);
+    onResult({ lat, lng, name, fullAddress });
   });
 
   return null; // The control is added to the map automatically
@@ -253,14 +261,15 @@ export default function ManageRoutes() {
   };
 
   // --- NEW: Handler for Geocoder (Address Search) result ---
-  const handleGeocoderResult = ({ lat, lng, name }) => {
+  const handleGeocoderResult = ({ lat, lng, name, fullAddress }) => {
     // Fly the map to the new location
     if (mapRef.current) {
       mapRef.current.flyTo({ center: [lng, lat], zoom: 15 });
     }
     // Set the popup to create a new stop
     setMapPopup({ lat, lng });
-    setNewStopName(name); // Pre-fill the stop name
+    // Use full address if available, otherwise use the name
+    setNewStopName(fullAddress || name); // Pre-fill the stop name with full address
   };
   
   // --- NEW: Handler to delete a stop from the MASTER LIST ---
@@ -460,7 +469,7 @@ export default function ManageRoutes() {
           <div className="card card-spacious">
             <h3 style={{ fontSize: '1.125rem', marginBottom: '1.5rem', fontWeight: '700' }}>2. Stop Bank</h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>
-              Click a stop to add it to the route. Click 🗑️ to delete it from the master list.
+              💡 <strong>Tip:</strong> Use the map search box to find street addresses. Click a stop to add it to the route. Click 🗑️ to delete it from the master list.
             </p>
             <div style={{ maxHeight: '300px', overflowY: 'auto', paddingRight: '0.5rem' }}>
               {availableStops.length === 0 ? (
@@ -550,10 +559,13 @@ export default function ManageRoutes() {
                 >
                   <div style={{ minWidth: '250px', padding: '0.5rem' }}>
                     <h4 style={{ margin: '0 0 1rem 0' }}>Create New Stop</h4>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+                      💡 Tip: Use the search box above to find an address, or enter a full street address below
+                    </p>
                     <div className="form-group">
                       <input
                         type="text"
-                        placeholder="New Stop Name"
+                        placeholder="Enter full street address (e.g., 123 Main St, City)"
                         value={newStopName}
                         onChange={(e) => setNewStopName(e.target.value)}
                       />
