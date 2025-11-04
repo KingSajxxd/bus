@@ -82,9 +82,16 @@ function GeocoderControl({ onResult }) {
     accessToken: MAPBOX_TOKEN,
     mapboxgl: null, // This will be set by useControl
     marker: false,  // We'll handle the marker ourselves
-    placeholder: 'Search for a street address...',
-    types: 'address', // Focus on addresses rather than POIs or cities
-    proximity: [79.8612, 6.9271], // Default to Sri Lanka coordinates
+    placeholder: 'Search for a location or address in Sri Lanka...',
+    // Allow multiple types for better Sri Lanka coverage
+    // 'address' may not be available, so we allow place, poi, and address
+    types: 'place,poi,address',
+    // Restrict to Sri Lanka for better results
+    countries: 'lk',
+    // Set proximity to Sri Lanka center
+    proximity: [79.8612, 6.9271],
+    // Enable bbox to focus on Sri Lanka
+    bbox: [79.7, 5.9, 81.9, 9.8], // Sri Lanka bounding box
   });
 
   useControl(() => {
@@ -99,12 +106,35 @@ function GeocoderControl({ onResult }) {
     const { result } = e;
     const [lng, lat] = result.geometry.coordinates;
     const name = result.text;
-    // Use place_name for full address (includes street, city, etc.)
-    // If not available, try to construct from context or use name
-    const fullAddress = result.place_name || 
-      (result.context ? 
-        `${result.text}, ${result.context.map(ctx => ctx.text).join(', ')}` : 
-        result.text);
+    
+    // For Sri Lanka, construct a better address format
+    // Mapbox might return different structures, so we handle multiple cases
+    let fullAddress = '';
+    
+    if (result.place_name) {
+      // Use place_name which includes full context
+      fullAddress = result.place_name;
+    } else if (result.context && result.context.length > 0) {
+      // Build address from context array (neighborhood, locality, district, etc.)
+      // In Sri Lanka, context might include: street, locality, district, region
+      const addressParts = [result.text];
+      result.context.forEach(ctx => {
+        // Skip if it's a country code or redundant
+        if (ctx.id && !ctx.id.startsWith('country')) {
+          addressParts.push(ctx.text);
+        }
+      });
+      fullAddress = addressParts.join(', ');
+    } else {
+      // Fallback to text
+      fullAddress = result.text;
+    }
+    
+    // If it's a POI or place, try to get more context
+    if (result.properties && result.properties.address) {
+      fullAddress = `${result.properties.address}, ${fullAddress}`;
+    }
+    
     onResult({ lat, lng, name, fullAddress });
   });
 
@@ -469,7 +499,7 @@ export default function ManageRoutes() {
           <div className="card card-spacious">
             <h3 style={{ fontSize: '1.125rem', marginBottom: '1.5rem', fontWeight: '700' }}>2. Stop Bank</h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>
-              💡 <strong>Tip:</strong> Use the map search box to find street addresses. Click a stop to add it to the route. Click 🗑️ to delete it from the master list.
+              💡 <strong>Tip:</strong> Use the map search box to find locations in Sri Lanka. You can search for streets, areas, landmarks, or click on the map and enter the address manually. Click a stop to add it to the route. Click 🗑️ to delete it from the master list.
             </p>
             <div style={{ maxHeight: '300px', overflowY: 'auto', paddingRight: '0.5rem' }}>
               {availableStops.length === 0 ? (
@@ -560,12 +590,15 @@ export default function ManageRoutes() {
                   <div style={{ minWidth: '250px', padding: '0.5rem' }}>
                     <h4 style={{ margin: '0 0 1rem 0' }}>Create New Stop</h4>
                     <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
-                      💡 Tip: Use the search box above to find an address, or enter a full street address below
+                      💡 <strong>Tip:</strong> Use the search box above to find a location, or click on the map and enter a full address manually.<br/>
+                      <span style={{ fontSize: '0.7rem', fontStyle: 'italic' }}>
+                        For Sri Lanka: Include street name, area/town, and district (e.g., "123 Galle Road, Colombo 05, Colombo District")
+                      </span>
                     </p>
                     <div className="form-group">
                       <input
                         type="text"
-                        placeholder="Enter full street address (e.g., 123 Main St, City)"
+                        placeholder="Enter full address (e.g., Street, Area, District)"
                         value={newStopName}
                         onChange={(e) => setNewStopName(e.target.value)}
                       />
